@@ -1,0 +1,40 @@
+name: Build task
+description: A coding task for Claude to build (usually filed by OpenClaw)
+title: "[build] "
+labels: ["claude-build"]
+body:
+  - type: input
+    id: app
+    attributes:
+      label: App name
+      description: Folder name under apps/ (kebab-case). Use an existing name to change an existing app.
+      placeholder: invoice-parser
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should exist when this is done, and who or what uses it.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: One per line. Each must be checkable by running something.
+      placeholder: |
+        - `python -m invoice_parser sample.pdf` prints JSON with total, date, vendor
+        - unit tests pass with `pytest`
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Stack and constraints
+      description: Language, framework, runtime, APIs, anything off-limits. Leave blank to let Claude choose.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Links, sample inputs, related issues or PRs.
