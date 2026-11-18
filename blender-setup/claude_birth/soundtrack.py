@@ -64,6 +64,16 @@ for i in range(k):
 sweep *= np.linspace(0, 1, k) ** 2.2
 add(sweep, rs, -0.2, 0.22); add(sweep, rs + 0.011, 0.2, 0.22)
 
+# --- Inflow: rising data chirps as code streams into the core (frames 135-270) ---
+for i in range(90):
+    st = rng.uniform(f2s(135), f2s(262))
+    length = rng.uniform(0.25, 0.6)
+    k = int(length * SR); tt = np.arange(k) / SR
+    f0 = rng.uniform(500, 1200); f1 = f0 * rng.uniform(2.0, 3.5)       # pitch rises as it closes in
+    freq = f0 + (f1 - f0) * (tt / length) ** 2
+    env = (tt / length) ** 2.5 * np.exp(-np.maximum(0, tt - length * 0.9) * 80)
+    add(np.sin(2 * np.pi * np.cumsum(freq) / SR) * env, st, rng.uniform(-0.9, 0.9), 0.035)
+
 # --- Ignition impact (frame ~204) --------------------------------------------
 it = f2s(203)
 k = int(3.5 * SR); tt = np.arange(k) / SR

@@ -36,6 +36,14 @@ CREAM  = lin((0.94, 0.93, 0.90))
 EYE    = (0.012, 0.010, 0.009)
 CORE_W = Vector((0, 0, 3.0))              # world position of the birth core
 
+def heat(base, x):
+    """Colour ramp for code approaching the core: base -> orange -> white-hot."""
+    if x < 0.55:
+        k = x / 0.55; a, b = base, ORANGE
+    else:
+        k = (x - 0.55) / 0.45; a, b = ORANGE, HOT
+    return tuple(a[i] + (b[i] - a[i]) * k for i in range(3))
+
 def object_color_material(name, k_emit, rough=0.45, metallic=0.0, emission_only=False):
     """Material whose colour = object colour and emission = object alpha * k_emit.
     Lets us animate colour/glow per object with plain keyframes."""
@@ -299,6 +307,7 @@ for i in range(260):
     r96 = math.hypot(p96.x, p96.y); a96 = math.atan2(p96.y, p96.x)
     turns = random.uniform(1.0, 1.8) * 2 * math.pi
     steps = 7
+    spiral = []
     for s in range(1, steps + 1):
         t = s / steps
         f = int(96 + t * (arrive - 96))
@@ -306,15 +315,20 @@ for i in range(260):
         aa = a96 + t * turns
         zz = p96.z + (CORE_W.z - p96.z) * (t ** 1.6)
         key(o, "location", f, (rr * math.cos(aa), rr * math.sin(aa), zz))
+        spiral.append((f, Vector((rr * math.cos(aa), rr * math.sin(aa), zz))))
     key(o, "rotation_euler", arrive, (math.radians(20), 0, spin + turns * 1.1))
     key(o, "scale", 1, (1, 1, 1))
-    key(o, "scale", arrive - 20, (1, 1, 1))
+    key(o, "scale", arrive - 12, (1, 1, 1))
     key(o, "scale", arrive, (0, 0, 0))
     base = CREAM if random.random() < 0.8 else ORANGE
     a_base = random.uniform(0.18, 0.4)
     key(o, "color", 1, (*base, a_base))
-    key(o, "color", arrive - 25, (*base, a_base))
-    key(o, "color", arrive, (*HOT, 1.4))
+    key(o, "color", 96, (*base, a_base))
+    # light up as it nears the core: cream -> orange -> white-hot
+    d96 = (p96 - CORE_W).length
+    for f, pos in spiral:
+        prox = 1 - min(1.0, (pos - CORE_W).length / d96)
+        key(o, "color", f, (*heat(base, prox), a_base + (1.8 - a_base) * prox ** 2.2))
     glyphs.append(o)
 
 # ---------------------------------------------------------------- core + its light
@@ -322,17 +336,56 @@ bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=4, radius=1, location=CORE_W)
 core = bpy.context.object; core.name = "Core"
 core.data.materials.append(M_CORE)
 for p in core.data.polygons: p.use_smooth = True
-for f, s, a in ((1, 0, 0.2), (120, 0, 0.2), (160, 0.12, 0.35), (196, 0.38, 0.6), (204, 0.75, 1.6), (214, 0.3, 0.9), (226, 0.0, 0.2)):
+for f, s, a in ((1, 0, 0.2), (120, 0, 0.2), (160, 0.12, 0.35), (196, 0.38, 0.6), (204, 0.75, 1.6), (214, 0.3, 0.9), (226, 0.2, 0.9), (262, 0.16, 0.8), (284, 0.0, 0.2)):
     key(core, "scale", f, (s, s, s)); key(core, "color", f, (*HOT, a))
 
 core_light = link(bpy.data.objects.new("CoreLight", bpy.data.lights.new("CoreLight", "POINT")))
 core_light.location = CORE_W
 core_light.data.color = HOT
 core_light.data.shadow_soft_size = 0.3
-for f, e in ((1, 0), (130, 0), (196, 900), (204, 6000), (230, 900), (290, 150), (340, 0)):
+for f, e in ((1, 0), (130, 0), (196, 900), (204, 6000), (230, 900), (262, 700), (290, 150), (340, 0)):
     key(core_light.data, "energy", f, e)
 
-# ---------------------------------------------------------------- embers from the ignition
+# ---------------------------------------------------------------- code streams feeding the birth
+# Instead of an outward explosion, fragments of code pour in from every direction,
+# heating up from dim cream to white-hot as they near the core.
+srng = random.Random(1234)
+STREAM_TOKENS = list("01{}();<>/=+*[]#&|:") + ["0x", "=>", "fn", "//", "</>"]
+n_lanes = 14
+lanes = []
+for k in range(n_lanes):  # streams arrive along shared lanes so they read as flowing filaments
+    d = Vector((srng.gauss(0, 1), srng.gauss(0, 0.8), srng.gauss(0, 1))).normalized()
+    lanes.append((d, srng.uniform(-1, 1)))
+for i in range(480):
+    d, twist_dir = lanes[i % n_lanes]
+    d = (d + Vector((srng.gauss(0, 0.08), srng.gauss(0, 0.08), srng.gauss(0, 0.08)))).normalized()
+    perp1 = d.orthogonal().normalized(); perp2 = d.cross(perp1)
+    R = srng.uniform(6.5, 11.0)
+    st = srng.randint(135, 224)
+    dur = srng.randint(30, 46)
+    phase = srng.uniform(0, 2 * math.pi)
+    tok = srng.choice(STREAM_TOKENS)
+    cu = bpy.data.curves.new(f"s{i}", "FONT"); cu.body = tok
+    cu.align_x, cu.align_y = "CENTER", "CENTER"
+    cu.size = srng.uniform(0.13, 0.3); cu.extrude = 0.008
+    o = link(bpy.data.objects.new(f"stream_{i:03d}", cu)); o.data.materials.append(M_GLYPH)
+    o.rotation_euler = (math.radians(90) + srng.uniform(-0.4, 0.4), srng.uniform(-0.3, 0.3), srng.uniform(-0.4, 0.4))
+    base = CREAM if srng.random() < 0.75 else ORANGE
+    steps = 6
+    key(o, "scale", 1, (0, 0, 0)); key(o, "scale", st, (0, 0, 0)); key(o, "scale", st + 4, (1, 1, 1))
+    key(o, "scale", st + dur - 6, (1, 1, 1)); key(o, "scale", st + dur, (0, 0, 0))
+    for sidx in range(steps + 1):
+        t = sidx / steps
+        f = int(st + t * dur)
+        rad = R * (1 - t) ** 1.25
+        swirl = 0.18 * R * (1 - t) * twist_dir
+        ang = phase + t * 2.4 * twist_dir
+        pos = CORE_W + d * rad + perp1 * (swirl * math.cos(ang)) + perp2 * (swirl * math.sin(ang))
+        key(o, "location", f, pos)
+        prox = t ** 1.1
+        key(o, "color", f, (*heat(base, prox), 0.06 + 2.2 * prox ** 2.4))
+
+# ---------------------------------------------------------------- floating embers (ambient, act IV-V)
 bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1)
 ember_mesh = bpy.context.object.data; ember_mesh.materials.append(M_EMBER)
 bpy.data.objects.remove(bpy.context.object)
@@ -340,14 +393,13 @@ for i in range(140):
     o = link(bpy.data.objects.new(f"ember_{i:03d}", ember_mesh))
     d = Vector((random.gauss(0, 1), random.gauss(0, 1), random.gauss(0, 1))).normalized()
     s = random.uniform(0.012, 0.035)
-    p1 = CORE_W + d * random.uniform(1.5, 6.0)
+    p1 = CORE_W + d * random.uniform(2.0, 6.5)
     p2 = p1 + Vector((random.uniform(-0.6, 0.6), random.uniform(-0.6, 0.6), random.uniform(1.0, 3.0)))
-    st = 202 + random.randint(0, 6)
-    key(o, "location", 1, CORE_W); key(o, "location", st, CORE_W)
-    key(o, "location", st + 26, p1); key(o, "location", 480, p2, "LINEAR")
-    key(o, "scale", 1, (0, 0, 0)); key(o, "scale", st, (0, 0, 0)); key(o, "scale", st + 4, (s, s, s))
-    key(o, "scale", 480, (s * 0.6,) * 3)
-    key(o, "color", st, (*HOT, 1.0)); key(o, "color", st + 60, (*ORANGE, 0.45)); key(o, "color", 480, (*ORANGE, 0.25))
+    st = 262 + random.randint(0, 50)
+    key(o, "location", 1, p1, "LINEAR"); key(o, "location", 480, p2, "LINEAR")
+    key(o, "scale", 1, (0, 0, 0)); key(o, "scale", st, (0, 0, 0)); key(o, "scale", st + 20, (s, s, s))
+    key(o, "scale", 480, (s * 0.7,) * 3)
+    key(o, "color", 1, (*ORANGE, 0.4)); key(o, "color", 480, (*ORANGE, 0.25))
 
 # ---------------------------------------------------------------- floor
 bpy.ops.mesh.primitive_plane_add(size=80, location=(0, 0, 0))
