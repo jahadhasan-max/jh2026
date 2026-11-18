@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run a script against headless Blender with the agentkit helpers importable.
+#   bpyrun script.py [args...]
+# In the script, read arguments with agentkit.argv() so it also works under
+# desktop Blender (`blender -b --python script.py -- args`).
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$("$DIR/bootstrap.sh")"
+export PYTHONWARNINGS="${PYTHONWARNINGS:-ignore::DeprecationWarning}"
+export PYTHONPATH="$DIR/../lib${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PY" "$@"
